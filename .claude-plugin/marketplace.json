@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "bigcell-plugins",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "이더컴퍼니 빅셀 업무 자동화 Cowork 플러그인 마켓플레이스",
   "owner": {
     "name": "EitherCompany",
