@@ -1,0 +1,27 @@
+{
+  "name": "bigcell-plugins",
+  "owner": {
+    "name": "EitherCompany",
+    "email": "ghgh404@gmail.com",
+    "url": "https://github.com/EitherCompany"
+  },
+  "description": "이더컴퍼니 빅셀 업무 자동화 Cowork 플러그인 마켓플레이스 (Private — GitHub: EitherCompany/bigcell-plugins)",
+  "plugins": [
+    {
+      "name": "bigcell-daily-report-v5",
+      "source": "./bigcell-daily-report-v5.plugin",
+      "description": "빅셀(BigCell) 일일 매출 분석 보고서 v5.0.4 — 5개 이커머스 계정 쿠팡/네이버 매출 추출 → 종합 HTML 보고서 (비중 카드, 8일 주간 차트, 특이사항 섹션). 날짜 미지정 시 어제 자동 적용.",
+      "version": "5.0.4",
+      "author": {
+        "name": "이창근 (이더컴퍼니)"
+      },
+      "keywords": [
+        "bigcell",
+        "빅셀",
+        "ecommerce",
+        "daily-report",
+        "sales-analysis"
+      ]
+    }
+  ]
+}
