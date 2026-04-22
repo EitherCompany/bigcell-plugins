@@ -423,3 +423,12 @@ innerText 패턴 (날짜당):
 - `q_show_type=daily` URL 사용 금지 — 해당 페이지 비어있음
 - Chrome MCP로 물리적 입력(triple_click, form_input 등) 금지 — Vue v-model 바인딩 우회 못함
 - **v5 포맷 요구사항(비중 카드 + 특이사항 섹션 + 지난주 비교) 누락 금지** — 하나라도 빠지면 포맷 퇴행
+
+## 개선 이력
+
+- **v5.0.5 (2026-04-22)** — 네이버 매출 Lambda raw API 가로채기
+  - 증상: `.ag-floating-top-container` 요약행에서 `col-id="sale_amount"` 셀이 빈 문자열을 반환 → 네이버 매출이 항상 ₩0 으로 저장 → 매출 비중 % 왜곡
+  - 원인: 빅셀이 네이버 통계 페이지 요약행에서 `sale_amount` 컬럼을 UI 에서 숨길 수 있음 (사용자 컬럼 설정 혹은 일시 비공개). 순이익 `sale_net_amount` 만 노출되는 케이스 발생.
+  - 해결: Playwright `page.on('response')` 로 `ta7e75y...lambda-url.ap-northeast-2.on.aws` 응답을 가로챔. 응답 `body` 필드가 `gzip+base64` 인코딩된 `{statistics:[상품 row, …]}` 구조 → 디코드 후 각 row 의 `sale_amount` 합산. UI 에 안 보이는 상황에도 raw API 에는 그대로 내려옴.
+  - 구현 위치: `integrated_bigcell.py` 의 `# ── 5) 네이버 상품 데이터` 블록 직전 리스너 등록, `nv_sales_lambda` 에 합계 저장, nv_summary 구성 시 Lambda 값이 있으면 UI 요약행보다 우선 사용
+  - 검증 (2026-04-21): 뉴트리정 = ₩824,575, 이더컴퍼니 = ₩718,579 (두 값 UI 재집계치와 일치)

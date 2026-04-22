@@ -6,6 +6,8 @@
 """
 
 import asyncio
+import base64
+import gzip
 import json
 import os
 import io
@@ -530,7 +532,43 @@ async def main():
             # ── 5) 네이버 상품 데이터 + 스크린샷 + 네이버 대시보드 ──
             if acc['naver']:
                 print(f"  📊 네이버 상품 수집 + 스크린샷...")
+                # ✨ 빅셀 네이버 UI 가 sale_amount 컬럼을 숨겨버리므로
+                #    내부 Lambda(ta7e75y...) raw 응답을 가로채 sale_amount 를 직접 합산한다.
+                _lambda_bodies = []
+                async def _lambda_sniffer(resp):
+                    try:
+                        if 'lambda-url' in resp.url and 'q_sale_date' in resp.url:
+                            b = await resp.body()
+                            _lambda_bodies.append(b)
+                    except Exception:
+                        pass
+                page.on('response', _lambda_sniffer)
+
                 nv_products, nv_screenshot = await extract_rfm_and_screenshot(page, acc, TARGET_DATE_SLASH, is_naver=True)
+
+                # 리스너 제거 (다음 계정 오염 방지)
+                try:
+                    page.remove_listener('response', _lambda_sniffer)
+                except Exception:
+                    pass
+
+                # Lambda 응답 → 총 sale_amount 계산
+                nv_sales_lambda = None
+                for raw in _lambda_bodies:
+                    try:
+                        outer = json.loads(raw.decode('utf-8'))
+                        body_b64 = outer.get('body')
+                        if not body_b64:
+                            continue
+                        inner = json.loads(gzip.decompress(base64.b64decode(body_b64)).decode('utf-8'))
+                        rows = inner.get('statistics') or []
+                        total = sum((r.get('sale_amount') or 0) for r in rows if isinstance(r, dict))
+                        if total:
+                            nv_sales_lambda = total
+                            print(f"  💰 Lambda 네이버 매출 합: ₩{total:,} (rows={len(rows)})")
+                            break
+                    except Exception as e:
+                        print(f"  ⚠️ Lambda decode 실패: {e}")
 
                 nv_prod_file = f'{account_id}_naver_data.json'
                 with open(os.path.join(DATA_DIR, nv_prod_file), 'w', encoding='utf-8') as f:
@@ -559,16 +597,25 @@ async def main():
                 })();
                 """)
 
-                if nv_summary and nv_summary.get('sales'):
+                # Lambda raw 매출이 있으면 그것이 진실. UI fallback 보다 우선.
+                if nv_summary is None:
+                    nv_summary = {}
+                if nv_sales_lambda is not None:
+                    nv_summary['sales'] = f"₩{nv_sales_lambda:,}"
+
+                if nv_summary.get('sales'):
                     nv_dashboard_json = {'daily': [
-                        {'date': TARGET_DATE, 'sales': nv_summary['sales'], 'profit': nv_summary['netProfit'],
-                         'adCost': nv_summary.get('adCost', '₩0'), 'netProfit': nv_summary['netProfit']}
+                        {'date': TARGET_DATE,
+                         'sales': nv_summary['sales'],
+                         'profit': nv_summary.get('netProfit', '₩0'),
+                         'adCost': nv_summary.get('adCost', '₩0'),
+                         'netProfit': nv_summary.get('netProfit', '₩0')}
                     ]}
-                    print(f"  📊 네이버 요약: 매출={nv_summary['sales']}, 순이익={nv_summary['netProfit']}")
+                    print(f"  📊 네이버 요약: 매출={nv_summary['sales']}, 순이익={nv_summary.get('netProfit','N/A')}")
                 else:
                     # fallback: 상품 합산
                     nv_dashboard_json = {'daily': []}
-                    print(f"  ⚠️ 네이버 요약행 추출 실패")
+                    print(f"  ⚠️ 네이버 요약행 + Lambda 모두 추출 실패")
 
                 nv_file = f'data_{acc["data_prefix"]}_naver.json'
                 with open(os.path.join(DATA_DIR, nv_file), 'w', encoding='utf-8') as f:
