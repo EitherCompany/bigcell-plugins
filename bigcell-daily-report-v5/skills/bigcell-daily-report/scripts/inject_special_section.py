@@ -1,33 +1,35 @@
 """
 빅셀 특이사항 섹션 HTML 조립 + v3 보고서 삽입.
 
+v5.1.0 (2026-04-23) 포맷 간소화:
+  - 한눈 요약의 '전일 → 금일' 블록 제거 → 지난주 동일요일 대비만 메인으로
+  - 계정별 변동 표에서 '전일 대비' 2개 컬럼 제거 → 지난주 동일요일 대비만
+  - 상품 단위 이슈는 product_bullets가 실제로 있을 때만 ② 섹션 렌더링
+    (데이터 수집 실패 안내 문구 같은 fallback bullet 금지 — 빈 리스트면 섹션 자체 숨김)
+
 입력:
   --context       build_special_context.py가 만든 JSON (숫자/상품 데이터)
-  --interpretation Claude가 작성한 해석 문장들 JSON (구조는 아래 INTERPRETATION_SCHEMA 참조)
+  --interpretation Claude가 작성한 해석 문장들 JSON (구조는 아래 스키마 참조)
   --report        삽입 대상 v3 HTML 보고서 경로 (in-place 수정)
 
-동작:
-  - context의 숫자 기반 테이블(한눈 요약 + 계정별 변동 표)을 자동 조립
-  - interpretation의 해석 문장을 주입 (한눈 요약 마지막 해석, 계정별 '주요 사유', 상품 bullet)
-  - 최종 HTML 블록을 보고서의 </body> 직전에 삽입
-
-interpretation JSON 스키마:
+interpretation JSON 스키마 (v5.1.0):
 {
-  "summary_interpretation": "문장 (한눈 요약의 해석 부분)",
-  "account_reasons": {
-    "전체 합산": "...",
-    "뉴트리정": "...",
-    "이더컴퍼니": "...",
-    "클린인테크": "...",
-    "마인플로": "...",
-    "이든코퍼레이션": "..."
-  },
-  "product_bullets": [
-    "<b>상품명 — 이슈</b>: 설명",
+  "weekly_bullets": [                  // 지난주 동일요일 대비 해석 (2~4개 리스트)
+    "수치 + 한 줄 결론",
     ...
   ],
-  "weekly_interpretation": "지난주 동일요일 대비 해석 (optional)"
+  "account_reasons": {                 // 계정별 '주요 사유' (지난주 대비 중심)
+    "전체 합산": "...",
+    "뉴트리정": "...",
+    ...
+  },
+  "product_bullets": [                 // 상품 단위 이슈 (있을 때만, 아주 간략하게)
+    "<b>상품명 — 이슈</b>: 수치",
+    ...
+  ]
 }
+
+레거시 호환: summary_bullets/summary_interpretation 등 전일 관련 필드가 들어와도 무시함.
 """
 import json
 import argparse
@@ -81,45 +83,24 @@ def format_weekday(date_str):
 
 
 def build_html(context, interp):
-    """특이사항 섹션 HTML 블록 생성."""
+    """특이사항 섹션 HTML 블록 생성 (v5.1.0: 지난주 동일요일 대비 only)."""
     td = context['target_date']
-    pd = context['prev_date']
     lw = context.get('last_week_date')
     total = context['total']
 
-    # 한눈 요약 — 전일 대비
-    s_delta = total['change']['sales']
-    np_delta = total['change']['netProfit']
-    s_color = '#27ae60' if s_delta > 0 else '#e74c3c'
-    np_color = '#27ae60' if np_delta > 0 else '#e74c3c'
-
-    # 지난주 대비
     week_change = total.get('change_week')
     has_week = week_change is not None
-    wk_s_delta = week_change['sales'] if has_week else 0
-    wk_np_delta = week_change['netProfit'] if has_week else 0
-    wk_s_color = '#27ae60' if wk_s_delta > 0 else '#e74c3c'
-    wk_np_color = '#27ae60' if wk_np_delta > 0 else '#e74c3c'
 
-    # 해석 bullet — list 구조 우선, 없으면 string에서 소수점 보호 split
-    daily_bullets = to_bullets(interp.get('summary_bullets') or interp.get('summary_interpretation'))
+    # 지난주 대비 해석 bullets
     weekly_bullets = to_bullets(interp.get('weekly_bullets') or interp.get('weekly_interpretation'))
 
-    # 전일 대비 수치 아이템
-    s_pct = total['change'].get('sales_pct')
-    np_pct = total['change'].get('netProfit_pct')
-    s_pct_str = f", {s_pct:+.1f}%" if s_pct is not None else ''
-    np_pct_str = f", {np_pct:+.1f}%" if np_pct is not None else ''
-
-    daily_items_html = f'''
-                <li>매출: {won(total['prev']['sales'])} → <b>{won(total['target']['sales'])}</b> <span style="color:{s_color}">({'+' if s_delta>=0 else ''}{won(s_delta)}{s_pct_str})</span></li>
-                <li>순이익: {won(total['prev']['netProfit'])} → <b>{won(total['target']['netProfit'])}</b> <span style="color:{np_color}">({'+' if np_delta>=0 else ''}{won(np_delta)}{np_pct_str})</span></li>'''
-    for b in daily_bullets:
-        daily_items_html += f'\n                <li>{b}</li>'
-
-    # 지난주 대비 블록
+    # 지난주 요약 블록
     week_summary_html = ''
     if has_week:
+        wk_s_delta = week_change['sales']
+        wk_np_delta = week_change['netProfit']
+        wk_s_color = '#27ae60' if wk_s_delta > 0 else '#e74c3c'
+        wk_np_color = '#27ae60' if wk_np_delta > 0 else '#e74c3c'
         wk_s_pct = week_change.get('sales_pct')
         wk_np_pct = week_change.get('netProfit_pct')
         wk_s_pct_str = f", {wk_s_pct:+.1f}%" if wk_s_pct is not None else ''
@@ -143,37 +124,25 @@ def build_html(context, interp):
             </div>'''
 
     html = f'''<!-- 특이사항 (자동 분석) -->
-    <div class="account-section" style="margin-top:30px;border:2px solid #f39c12;background:#fffaf0">
-        <div class="account-header" onclick="toggleSection('section_special')" style="background:linear-gradient(135deg,#f39c12 0%,#e67e22 100%);color:white">
+    <div class="account-section" style="margin-top:30px;border:2px solid #8e44ad;background:#faf5fe">
+        <div class="account-header" onclick="toggleSection('section_special')" style="background:linear-gradient(135deg,#8e44ad 0%,#6c3483 100%);color:white">
             <div class="account-title-row">
-                <span class="account-name" style="color:white">📌 특이사항 — 전일/지난주 대비 분석 요약</span>
+                <span class="account-name" style="color:white">📌 특이사항 — 지난주 동일요일 대비 분석</span>
                 <span class="account-toggle" style="color:white">▼</span>
             </div>
         </div>
         <div class="account-body" id="section_special" style="padding:24px;line-height:1.7">
-
-            <div style="background:#fff;border-left:4px solid #e67e22;padding:14px 18px;margin-bottom:18px;border-radius:6px">
-                <strong style="font-size:1.05em">🔎 한눈 요약 ({format_weekday(pd)} → {format_weekday(td)})</strong>
-                <ol style="margin:10px 0 0 0;padding-left:24px;color:#444;line-height:1.8">{daily_items_html}
-                </ol>
-            </div>
             {week_summary_html}
 
-            <h3 style="color:#e67e22;border-bottom:2px solid #f39c12;padding-bottom:6px;margin-top:18px">① 계정별 변동 (전일 · 지난주 동일요일 대비)</h3>
+            <h3 style="color:#8e44ad;border-bottom:2px solid #8e44ad;padding-bottom:6px;margin-top:18px">① 계정별 변동 (지난주 동일요일 대비)</h3>
             <table style="width:100%;border-collapse:collapse;margin-bottom:8px;font-size:0.93em">
                 <thead>
                     <tr style="background:#f8f9fa">
-                        <th rowspan="2" style="padding:8px;text-align:center;border:1px solid #e0e0e0;vertical-align:middle">계정</th>
-                        <th rowspan="2" style="padding:8px;text-align:center;border:1px solid #e0e0e0;vertical-align:middle">금일 순이익</th>
-                        <th colspan="2" style="padding:6px;text-align:center;border:1px solid #e0e0e0;background:#fce6c6;color:#b75b12">전일 대비</th>
-                        <th colspan="2" style="padding:6px;text-align:center;border:1px solid #e0e0e0;background:#e1c9ec;color:#5e2a76">지난주 동일요일 대비</th>
-                        <th rowspan="2" style="padding:8px;text-align:center;border:1px solid #e0e0e0;vertical-align:middle">주요 사유</th>
-                    </tr>
-                    <tr>
-                        <th style="padding:6px;text-align:center;border:1px solid #e0e0e0;font-weight:500;color:#b75b12;background:#fff3e0">전일 순이익</th>
-                        <th style="padding:6px;text-align:center;border:1px solid #e0e0e0;font-weight:500;color:#b75b12;background:#fff3e0">변동</th>
-                        <th style="padding:6px;text-align:center;border:1px solid #e0e0e0;font-weight:500;color:#5e2a76;background:#f3e5f5">지난주 순이익</th>
-                        <th style="padding:6px;text-align:center;border:1px solid #e0e0e0;font-weight:500;color:#5e2a76;background:#f3e5f5">변동</th>
+                        <th style="padding:8px;text-align:center;border:1px solid #e0e0e0">계정</th>
+                        <th style="padding:8px;text-align:center;border:1px solid #e0e0e0">금일 순이익</th>
+                        <th style="padding:8px;text-align:center;border:1px solid #e0e0e0;background:#f3e5f5;color:#5e2a76">지난주 순이익</th>
+                        <th style="padding:8px;text-align:center;border:1px solid #e0e0e0;background:#f3e5f5;color:#5e2a76">변동</th>
+                        <th style="padding:8px;text-align:center;border:1px solid #e0e0e0">주요 사유</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -181,23 +150,19 @@ def build_html(context, interp):
 
     reasons = interp.get('account_reasons', {})
 
-    # 컬럼 배경색 (얇은 톤)
-    BG_PREV = '#fff3e0'   # 전일 대비 열
     BG_WEEK = '#f3e5f5'   # 지난주 대비 열
 
     # 전체 합산 행
     total_reason = reasons.get('전체 합산', '')
-    if total.get('change_week'):
+    if has_week:
         cw = total['change_week']
         total_lw_cells = value_cell(total['last_week']['netProfit'], bg=BG_WEEK) + '\n                    ' + change_cell(cw['netProfit'], cw['netProfit_pct'], bg=BG_WEEK)
     else:
         total_lw_cells = f'<td colspan="2" style="padding:8px;text-align:center;border:1px solid #e0e0e0;color:#999;background:{BG_WEEK}">N/A</td>'
 
-    html += f'''                <tr style="background:#fef9f3">
+    html += f'''                <tr style="background:#f8f0ff">
                     <td style="padding:8px;text-align:center;border:1px solid #e0e0e0"><b>전체 합산</b></td>
                     {value_cell(total['target']['netProfit'], bold=True)}
-                    {value_cell(total['prev']['netProfit'], bg=BG_PREV)}
-                    {change_cell(np_delta, total['change']['netProfit_pct'], bg=BG_PREV)}
                     {total_lw_cells}
                     <td style="padding:8px;text-align:left;border:1px solid #e0e0e0">{total_reason}</td>
                 </tr>
@@ -216,8 +181,6 @@ def build_html(context, interp):
         html += f'''                <tr>
                     <td style="padding:8px;text-align:center;border:1px solid #e0e0e0"><b>{label}</b></td>
                     {value_cell(a['target']['netProfit'], bold=True)}
-                    {value_cell(a['prev']['netProfit'], bg=BG_PREV)}
-                    {change_cell(a['change']['netProfit'], a['change']['netProfit_pct'], bg=BG_PREV)}
                     {lw_cells}
                     <td style="padding:8px;text-align:left;border:1px solid #e0e0e0">{reason}</td>
                 </tr>
@@ -225,16 +188,23 @@ def build_html(context, interp):
 
     html += '''                </tbody>
             </table>
-
-            <h3 style="color:#e67e22;border-bottom:2px solid #f39c12;padding-bottom:6px;margin-top:18px">② 주목할 상품 단위 이슈</h3>
-            <ul>
 '''
 
-    for bullet in interp.get('product_bullets', []):
-        html += f'                <li>{bullet}</li>\n'
+    # ② 상품 단위 이슈 — product_bullets가 실제로 있을 때만 렌더링
+    product_bullets = interp.get('product_bullets') or []
+    # 빈 문자열/공백만 있는 항목 필터링
+    product_bullets = [b for b in product_bullets if str(b).strip()]
 
-    html += '''            </ul>
+    if product_bullets:
+        html += '''
+            <h3 style="color:#8e44ad;border-bottom:2px solid #8e44ad;padding-bottom:6px;margin-top:18px">② 주목할 상품 단위 이슈</h3>
+            <ul>
+'''
+        for bullet in product_bullets:
+            html += f'                <li>{bullet}</li>\n'
+        html += '            </ul>\n'
 
+    html += '''
         </div>
     </div>'''
 
@@ -249,10 +219,6 @@ def inject(report_path, html_block):
     # 기존 특이사항 섹션이 있으면 제거하고 새로 삽입
     old_start = content.find('<!-- 특이사항 (자동 분석) -->')
     if old_start != -1:
-        old_end_marker = '</div>\n    </div>'
-        # 섹션 끝 찾기 (마지막 </div>\n    </div>)
-        search_start = old_start
-        # 간단한 대처: 특이사항 시작부터 다음 빈 줄 or </body> 까지
         body_end = content.find('</body>', old_start)
         content = content[:old_start].rstrip() + '\n' + content[body_end:]
 

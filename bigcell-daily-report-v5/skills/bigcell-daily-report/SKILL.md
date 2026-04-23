@@ -212,18 +212,13 @@ Phase 4 context JSON을 읽고 다음 JSON을 작성해 `interpretation_YYYY-MM-
 
 ```json
 {
-  "summary_bullets": [
-    "전일 대비 해석 문장 1 (간결 1줄)",
-    "전일 대비 해석 문장 2",
-    "... (2~4개, 각 아이템은 독립 문장)"
-  ],
   "weekly_bullets": [
-    "지난주 동일요일 대비 해석 문장 1",
+    "지난주 동일요일 대비 해석 문장 1 (간결 1줄, 수치 + 결론)",
     "지난주 동일요일 대비 해석 문장 2",
-    "... (2~4개, change_week가 있을 때만 작성)"
+    "... (2~4개, change_week가 있을 때만)"
   ],
   "account_reasons": {
-    "전체 합산": "한 줄 요약 (장황한 서술 금지)",
+    "전체 합산": "한 줄 요약 (지난주 대비 중심, 장황한 서술 금지)",
     "뉴트리정": "...",
     "이더컴퍼니": "...",
     "클린인테크": "...",
@@ -231,20 +226,21 @@ Phase 4 context JSON을 읽고 다음 JSON을 작성해 `interpretation_YYYY-MM-
     "이든코퍼레이션": "..."
   },
   "product_bullets": [
-    "<b>상품명 — 이슈 요약</b>: 수치 + 1줄 결론",
-    "... (5~7개, top_profit/loss_making/loss_high_sales/low_margin 기반)"
+    "<b>상품명 — 이슈</b>: 수치 한 줄",
+    "... (있는 경우에만, 아주 간략하게)"
   ]
 }
 ```
 
-**v5.0.2 포맷 원칙 (절대 준수):**
-- `summary_bullets`, `weekly_bullets`는 **반드시 list**로 작성 — 한 문자열 서술은 금지. 각 아이템이 보고서에서 번호(①②③…) 리스트로 렌더링됨
-- 각 아이템은 **수치 + 한 줄 결론** 스타일 (서술형 금지)
-- 수치는 context에서 **그대로 인용** (새로 계산하지 말 것)
-- 반복/중복 지적 (예: "전일 보고서에서도 지적된 문제 미해결") 명시
-- 적자 상품은 광고비/매출 비율까지 포함
+**v5.1.0 포맷 원칙 (절대 준수):**
+- **전일 대비 필드 작성 금지** — `summary_bullets` / `summary_interpretation` 등은 이번 포맷에서 렌더링되지 않음 (inject 스크립트가 무시). 해석은 **지난주 동일요일 대비로만** 작성.
+- `weekly_bullets`는 **반드시 list**, 각 아이템 "수치 + 한 줄 결론" 스타일
+- `account_reasons`는 **지난주 대비 주요 사유 중심**으로 서술 (전일 비교 금지)
+- 수치는 context에서 **그대로 인용** (새로 계산 금지)
+- **`product_bullets`는 실제 이슈 상품이 있을 때만 작성**. 데이터 부재 안내("데이터 수집 실패" 등)나 fallback 문구 절대 금지 — 상품 이슈 없으면 빈 리스트 `[]` 또는 키 생략. 그러면 inject가 ② 섹션 자체를 숨김.
+- 아이템은 최대 3~5개, "상품명 — 핵심 이슈 한 줄" 형식으로 아주 간략하게.
 
-**레거시 호환:** `summary_interpretation` / `weekly_interpretation` (단일 문자열) 키도 fallback으로 지원되지만, 신규 작성 시에는 `_bullets` list 버전을 쓴다. 문자열 fallback 사용 시 inject 스크립트가 소수점 보호(`(?<!\d)\.(?!\d)`)로 split 처리.
+**레거시 호환:** `weekly_interpretation` (단일 문자열) 키도 fallback으로 지원되지만, 신규 작성 시에는 `weekly_bullets` list 버전을 쓴다.
 
 ---
 
@@ -263,18 +259,18 @@ python3 "스킬경로/scripts/inject_special_section.py" \
   --report /sessions/SESSION_ID/mnt/OUTPUT_DIR/빅셀_일일보고서_v5_YYYY-MM-DD.html
 ```
 
-### 주입되는 HTML 블록 구조
+### 주입되는 HTML 블록 구조 (v5.1.0)
 
 ```
-📌 특이사항 — 전일/지난주 대비 분석 요약
-├─ 🔎 한눈 요약 (전일 → 금일)
-│   매출/순이익 변동 + summary_interpretation
-│   📅 지난주 동일요일 대비 (lw → 금일)   ← change_week 있을 때만
-│       매출/순이익 변동 + weekly_interpretation
-├─ ① 계정별 변동 테이블 (2단 헤더)
-│   계정 | 금일 순이익 | [전일 대비: 전일 순이익/변동] | [지난주 대비: 지난주 순이익/변동] | 주요 사유
-└─ ② 주목할 상품 단위 이슈 (product_bullets)
+📌 특이사항 — 지난주 동일요일 대비 분석
+├─ 📅 지난주 동일요일 대비 (lw → 금일)   ← change_week 있을 때만
+│   매출/순이익 변동 + weekly_bullets 리스트
+├─ ① 계정별 변동 (지난주 동일요일 대비)
+│   계정 | 금일 순이익 | 지난주 순이익 | 변동 | 주요 사유
+└─ ② 주목할 상품 단위 이슈 (product_bullets 있을 때만 렌더링)
 ```
+
+전일 대비 블록/컬럼은 v5.1.0에서 제거됨. 상품 단위 이슈 섹션은 product_bullets가 비어있으면 통째로 생략.
 
 ---
 
@@ -315,27 +311,28 @@ echo "순이익 비중 카드:"; grep -c '순이익 비중</span>' "$F"     # ==
 echo "특이사항 섹션:"; grep -c '특이사항 (자동 분석)' "$F"       # == 1
 echo "지난주 동일요일 대비 컬럼:"; grep -c '지난주 동일요일 대비' "$F"  # >= 1
 
-# v5.0.2 추가 검증
-echo "8일 차트 라벨:"; python3 -c "import re; t=open('$F',encoding='utf-8').read(); m=re.search(r'labels:\s*(\[[^\]]+\])', t); print(len(re.findall(r'[0-9]{2}/[0-9]{2}\\\\u[0-9a-f]{4}', m.group(1))) if m else 0)"  # == 8 (MM/DD + unicode 요일)
-echo "번호 리스트 ol:"; grep -c 'padding-left:24px' "$F"        # >= 2 (한눈요약 + 지난주)
-echo "전일 컬럼 배경색:"; grep -c 'background:#fff3e0' "$F"     # >= 10 (표 전체 행)
-echo "지난주 컬럼 배경색:"; grep -c 'background:#f3e5f5' "$F"   # >= 10
-
-# v5.0.3 추가 검증 — 주간 차트 레이블에 한글 요일
+# v5.0.2~v5.0.3 — 주간 차트
+echo "8일 차트 라벨:"; python3 -c "import re; t=open('$F',encoding='utf-8').read(); m=re.search(r'labels:\s*(\[[^\]]+\])', t); print(len(re.findall(r'[0-9]{2}/[0-9]{2}\\\\u[0-9a-f]{4}', m.group(1))) if m else 0)"  # == 8
 echo "요일 레이블:"; python3 -c "import re; t=open('$F',encoding='utf-8').read(); m=re.search(r'labels:\s*(\[[^\]]+\])', t); print('OK' if m and re.search(r'[0-9]{2}/[0-9]{2}\([\\\\u]', m.group(1)) else 'MISSING')"  # OK
+
+# v5.1.0 — 전일 관련 요소 제거 확인
+echo "전일 컬럼 배경색 (제거됨):"; grep -c 'background:#fff3e0' "$F"  # == 0 (v5.1.0: 전일 배경색 제거)
+echo "지난주 컬럼 배경색:"; grep -c 'background:#f3e5f5' "$F"   # >= 10 (표 전체 행)
+echo "번호 리스트 ol (지난주만):"; grep -c 'padding-left:24px' "$F"   # >= 1 (지난주 블록)
 
 echo "Account order:"; grep -oE 'class="account-name">[^<]+' "$F"
 # 뉴트리정 → 이더컴퍼니 → 클린인테크 → 마인플로 → 이든코퍼레이션
 ```
 
-**포맷 퇴행 방지 (v5.0.3)**:
+**포맷 퇴행 방지 (v5.1.0)**:
 - 매출/순이익 비중 카드가 5개씩 렌더링 안 되면 실패
 - 특이사항 섹션이 빠지면 실패
 - 특이사항 테이블에 "지난주 동일요일 대비" 컬럼이 없으면 실패
-- **주간 차트 라벨이 8개가 아니면 실패** (7일 퇴행 금지 — 지난주 동일요일 비교 시각화 필수)
-- **주간 차트 라벨이 `MM/DD(요일)` 형식이 아니면 실패** (예: `04/13(월)` — `rebuild_report.py`의 `WEEKDAY_KOR` 목록 기반)
-- **번호 리스트 `<ol>`이 2개 이상 없으면 실패** (한눈요약/지난주 대비 모두 번호 리스트)
-- **전일/지난주 컬럼 배경색 구분 안 되면 실패** (`#fff3e0` / `#f3e5f5` 각각 10회 이상)
+- 주간 차트 라벨이 8개가 아니면 실패 (7일 퇴행 금지)
+- 주간 차트 라벨이 `MM/DD(요일)` 형식이 아니면 실패 (예: `04/13(월)`)
+- 지난주 컬럼 배경색 `#f3e5f5`이 10회 이상 없으면 실패
+- **전일 배경색 `#fff3e0`이 남아있으면 포맷 퇴행** (v5.1.0에서 제거된 요소)
+- **"특이사항 — 지난주 동일요일 대비 분석" 제목이 없으면 실패** (v5.0.x 제목 "전일/지난주 대비 분석 요약" 사용 금지)
 
 ---
 
@@ -425,6 +422,11 @@ innerText 패턴 (날짜당):
 - **v5 포맷 요구사항(비중 카드 + 특이사항 섹션 + 지난주 비교) 누락 금지** — 하나라도 빠지면 포맷 퇴행
 
 ## 개선 이력
+
+- **v5.1.0 (2026-04-23)** — 특이사항 섹션 포맷 간소화 (지난주 동일요일 대비 only)
+  - 변경: (1) 한눈 요약 "전일 → 금일" 블록 완전 제거, (2) 계정별 변동 표에서 전일 대비 2개 컬럼(전일 순이익 + 변동) 제거 → 지난주 컬럼(지난주 순이익 + 변동)만 유지, (3) 상품 단위 이슈 섹션은 `product_bullets`가 실제로 있을 때만 렌더링 (빈 리스트/키 없음 → ② 섹션 통째로 생략), (4) 섹션 제목 "전일/지난주 대비 분석 요약" → "지난주 동일요일 대비 분석", 색상 테마 주황→보라(#8e44ad) 통일.
+  - 이유: 전일 대비는 빅셀 대시보드 자체에서 바로 확인 가능하고 정산 사이클 때문에 수치 변동이 잦음. 지난주 동일요일 대비가 실제 인사이트의 핵심. 상품 단위는 데이터 없을 때 "데이터 수집 실패" 같은 fallback 문구가 노이즈만 추가해서 조건부 숨김으로 전환.
+  - 구현 위치: `inject_special_section.py` 의 `build_html` 전면 간소화. Phase 5 가이드의 interpretation JSON 스키마에서 `summary_bullets`/`summary_interpretation` 삭제 (레거시 호환만 유지, 렌더링은 안 함). 자가검증 grep도 v5.1.0 포맷 반영.
 
 - **v5.0.9 (2026-04-23)** — RFM 페이지 진입 전 viewport 분기 설정 (쿠팡 ROAS DOM 렌더링 강제)
   - 증상: v5.0.8에서도 쿠팡 광고ROAS 컬럼이 스크린샷에 안 잡힘. 이유: context 기본 viewport가 1800이라 AG Grid가 처음 렌더링 시 12개 컬럼 중 11개만 DOM에 배치하고 ROAS는 가상 렌더링으로 제외. 이 상태에서 scrollWidth 측정해도 ROAS 미포함 값이라 이후 뷰포트 확장 로직이 발동 안 함 (catch-22).
