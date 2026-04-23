@@ -426,6 +426,11 @@ innerText 패턴 (날짜당):
 
 ## 개선 이력
 
+- **v5.0.8 (2026-04-23)** — RFM 스크린샷 width 계산 개선 (네이버 화질 저하 수정)
+  - 증상: v5.0.7에서 뷰포트 width 최소 2400 강제 확장 → 쿠팡 광고ROAS 가시성은 확보했지만, 네이버처럼 컬럼 적은 그리드는 AG Grid가 남는 공간을 컬럼 폭 확장으로 채워서 내용이 sparse해지고, 2x DPR + HTML `width:100%` 축소 시 픽셀 밀도 저하 → 흐릿한 스크린샷 발생.
+  - 해결: `scrollWidth + 100` 만큼만 확장하되 현재 viewport보다 작으면 그대로 유지. 최소 2400 제한 제거. 쿠팡은 scrollWidth가 크니 자연스럽게 확장되어 ROAS 포함, 네이버는 기본 viewport 유지되어 화질 원상복구.
+  - 구현 위치: `integrated_bigcell.py` 의 `extract_rfm_and_screenshot` viewport 재설정 구간만 수정 (`GET_GRID_HEIGHT_JS`는 v5.0.7 그대로 유지).
+
 - **v5.0.7 (2026-04-23)** — RFM 스크린샷 뷰포트 width 확장 (우측 컬럼 잘림 해결)
   - 증상: 쿠팡/네이버 RFM 스크린샷 우측 `광고ROAS` 컬럼이 잘려서 안 보임. 기존 3개 컬럼(광고분석/운영상태/1688구매요청)은 CSS `display:none`으로 이미 잘 숨겨지고 있는데도 우측 잘림 발생.
   - 원인: AG Grid가 **수평으로도 가상 렌더링**을 하기 때문에, 뷰포트 너비 밖의 컬럼은 DOM에 아예 존재하지 않음 → `.ag-root-wrapper` 스크린샷에도 안 잡힘. 기존 코드는 스크린샷 직전 viewport **height만** 키우고 width는 그대로 둬서 문제.

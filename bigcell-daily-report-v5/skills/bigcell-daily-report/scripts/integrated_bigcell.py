@@ -342,9 +342,11 @@ async def extract_rfm_and_screenshot(page, account, target_date_slash, is_naver=
     if grid_info:
         current_size = page.viewport_size
         new_height = max(grid_info['scrollHeight'] * 3, 3000)
-        # v5.0.7: width도 확장해서 광고ROAS 등 우측 컬럼이 AG Grid 가상 렌더링에서 DOM에 포함되도록
-        # AG Grid scrollWidth가 기준. 여유 200px 추가.
-        new_width = max(grid_info.get('scrollWidth', 0) + 200, 2400, current_size['width'])
+        # v5.0.8: scrollWidth 기준으로만 확장 (최소 제한 제거).
+        # 쿠팡처럼 실제로 scrollWidth가 크면 자연스럽게 확장되고,
+        # 네이버처럼 좁은 그리드면 원래 viewport 크기 유지 → 컬럼 stretch로 인한 화질 저하 방지.
+        needed_width = grid_info.get('scrollWidth', 0) + 100
+        new_width = max(needed_width, current_size['width'])
         await page.set_viewport_size({'width': new_width, 'height': new_height})
         await page.wait_for_timeout(2000)
         await page.evaluate(CLEANUP_JS)
