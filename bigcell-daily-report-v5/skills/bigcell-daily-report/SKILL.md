@@ -426,6 +426,12 @@ innerText 패턴 (날짜당):
 
 ## 개선 이력
 
+- **v5.0.6 (2026-04-23)** — RFM 스크린샷 컬럼 정리 (광고집행비/ROAS 우측 가시성)
+  - 증상: 쿠팡/네이버 RFM 스크린샷에서 `최근7일 일일 평균판매량`과 `노출순위` 컬럼이 넓은 폭을 차지해, 우측 `광고집행비`·`광고ROAS`가 화면 밖으로 밀려 잘림. 사용자 수동으로는 드래그앤드롭으로 두 컬럼 빼고 찍어야 했음.
+  - 해결: `CLEANUP_JS`에 동적 헤더 매칭 로직 추가. `.ag-header-cell`을 스캔해 innerText가 "7일"+"평균판매량" 포함 또는 "노출순위"로 시작하는 헤더를 찾아 해당 `col-id`를 하드코드 hide 리스트(adverts-anlytics, product_stage_name, order_request)에 병합. 기존 CSS `display:none !important` 방식 그대로 재사용 → 빅셀이 col-id 바꿔도 한글 헤더만 안 바뀌면 작동.
+  - 구현 위치: `integrated_bigcell.py` 의 `CLEANUP_JS` 상수 블록 (화질은 기존 `device_scale_factor=2` 유지 — 컬럼 제거만으로 가시성 확보)
+  - 효과: 광고집행비·광고ROAS 컬럼이 스크린샷 안에 들어옴. 사용자 수동 조작 불필요.
+
 - **v5.0.5 (2026-04-22)** — 네이버 매출 Lambda raw API 가로채기
   - 증상: `.ag-floating-top-container` 요약행에서 `col-id="sale_amount"` 셀이 빈 문자열을 반환 → 네이버 매출이 항상 ₩0 으로 저장 → 매출 비중 % 왜곡
   - 원인: 빅셀이 네이버 통계 페이지 요약행에서 `sale_amount` 컬럼을 UI 에서 숨길 수 있음 (사용자 컬럼 설정 혹은 일시 비공개). 순이익 `sale_net_amount` 만 노출되는 케이스 발생.
