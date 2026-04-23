@@ -426,6 +426,11 @@ innerText 패턴 (날짜당):
 
 ## 개선 이력
 
+- **v5.0.9 (2026-04-23)** — RFM 페이지 진입 전 viewport 분기 설정 (쿠팡 ROAS DOM 렌더링 강제)
+  - 증상: v5.0.8에서도 쿠팡 광고ROAS 컬럼이 스크린샷에 안 잡힘. 이유: context 기본 viewport가 1800이라 AG Grid가 처음 렌더링 시 12개 컬럼 중 11개만 DOM에 배치하고 ROAS는 가상 렌더링으로 제외. 이 상태에서 scrollWidth 측정해도 ROAS 미포함 값이라 이후 뷰포트 확장 로직이 발동 안 함 (catch-22).
+  - 해결: `extract_rfm_and_screenshot` 진입 직후, goto 호출 **전에** `set_viewport_size`로 분기 설정. 쿠팡=2600 / 네이버=1800. 초기부터 넓은 뷰포트에 진입하므로 AG Grid가 처음부터 모든 컬럼을 DOM에 렌더링. 네이버는 1800 명시 유지해 이전 쿠팡 호출이 남긴 2600 상속 방지 (column stretch 차단).
+  - 구현 위치: `integrated_bigcell.py` 의 `extract_rfm_and_screenshot` 함수 시작부. v5.0.8의 screenshot-time scrollWidth 확장 로직은 그대로 보존 (fallback 역할).
+
 - **v5.0.8 (2026-04-23)** — RFM 스크린샷 width 계산 개선 (네이버 화질 저하 수정)
   - 증상: v5.0.7에서 뷰포트 width 최소 2400 강제 확장 → 쿠팡 광고ROAS 가시성은 확보했지만, 네이버처럼 컬럼 적은 그리드는 AG Grid가 남는 공간을 컬럼 폭 확장으로 채워서 내용이 sparse해지고, 2x DPR + HTML `width:100%` 축소 시 픽셀 밀도 저하 → 흐릿한 스크린샷 발생.
   - 해결: `scrollWidth + 100` 만큼만 확장하되 현재 viewport보다 작으면 그대로 유지. 최소 2400 제한 제거. 쿠팡은 scrollWidth가 크니 자연스럽게 확장되어 ROAS 포함, 네이버는 기본 viewport 유지되어 화질 원상복구.

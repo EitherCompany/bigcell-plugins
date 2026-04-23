@@ -248,6 +248,14 @@ async def dismiss_overlays(page):
 async def extract_rfm_and_screenshot(page, account, target_date_slash, is_naver=False):
     """RFM 페이지에서 상품 데이터 + 스크린샷 동시 추출"""
 
+    # v5.0.9: 쿠팡은 12개 컬럼(광고ROAS 포함)이라 기본 viewport(1800)로는 AG Grid가 우측 컬럼을 아예 DOM에 렌더링 안 함.
+    # → 쿠팡 탐색 전에 viewport를 2600으로 넓혀서 모든 컬럼이 처음부터 렌더링되도록.
+    # 네이버는 1800 명시적으로 유지 (이전 쿠팡 호출이 남긴 2600 viewport 상속 방지 → column stretch 차단).
+    if is_naver:
+        await page.set_viewport_size({'width': 1800, 'height': 900})
+    else:
+        await page.set_viewport_size({'width': 2600, 'height': 900})
+
     if is_naver:
         url = f'https://app.bigcell.co.kr/v2/statistics/naver?q_sale_date_from={target_date_slash}&q_sale_date_to={target_date_slash}&q_show_type=summary'
     else:
