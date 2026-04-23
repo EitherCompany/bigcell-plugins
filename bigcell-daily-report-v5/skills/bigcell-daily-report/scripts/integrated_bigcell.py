@@ -66,29 +66,8 @@ CLEANUP_JS = """
 (() => {
     let s = document.getElementById('bc-custom-css');
     if (!s) { s = document.createElement('style'); s.id = 'bc-custom-css'; document.head.appendChild(s); }
-
-    // v5.0.6: RFM 스크린샷에서 '최근7일 일일 평균판매량' + '노출순위' 컬럼을 동적으로 찾아 숨김
-    // 헤더 텍스트 매칭으로 col-id 확보 (빅셀 col-id 변경에도 강건)
-    const baseHides = ['adverts-anlytics', 'product_stage_name', 'order_request'];
-    const extraHides = [];
-    document.querySelectorAll('.ag-header-cell').forEach(h => {
-        const text = h.innerText.replace(/\\s+/g, ' ').trim();
-        const colId = h.getAttribute('col-id');
-        if (!colId) return;
-        // "최근 7일 일일 평균판매량" 계열
-        if (text.includes('7일') && (text.includes('평균판매량') || text.includes('평균 판매량'))) {
-            extraHides.push(colId);
-        }
-        // "노출순위" (정확 일치 또는 줄바꿈 포함 시작)
-        if (text === '노출순위' || text.startsWith('노출순위 ') || text.startsWith('노출순위\\n')) {
-            extraHides.push(colId);
-        }
-    });
-    const allHides = [...new Set([...baseHides, ...extraHides])];
-    const hideSel = allHides.map(c => `[col-id="${c}"]`).join(', ');
-
     s.textContent = `
-        ${hideSel} { display: none !important; }
+        [col-id="adverts-anlytics"], [col-id="product_stage_name"], [col-id="order_request"] { display: none !important; }
         .layout-sidebar { display: none !important; }
         .layout-main-container { margin-left: 0 !important; }
         .p-toast, .p-tooltip, .p-overlaypanel, .p-dialog-mask, .p-dialog,
@@ -196,13 +175,21 @@ RFM_EXTRACT_JS = """
 GET_GRID_HEIGHT_JS = """
 (() => {
     const vp = document.querySelector('.ag-body-viewport');
+    const hvp = document.querySelector('.ag-header-viewport') || document.querySelector('.ag-center-cols-container');
     const header = document.querySelector('.ag-header');
     const ft = document.querySelector('.ag-floating-top');
     const root = document.querySelector('.ag-root-wrapper');
     const paginator = document.querySelector('.p-paginator');
     if (!vp || !root) return null;
+    // v5.0.7: scrollWidth 포함 (우측 잘림 방지용 뷰포트 width 계산 기준)
+    const scrollWidth = Math.max(
+        vp.scrollWidth || 0,
+        hvp ? hvp.scrollWidth : 0,
+        root.scrollWidth || 0
+    );
     return {
         scrollHeight: vp.scrollHeight,
+        scrollWidth: scrollWidth,
         clientHeight: vp.clientHeight,
         headerHeight: header ? header.offsetHeight : 0,
         floatingTopHeight: ft ? ft.offsetHeight : 0,
@@ -355,7 +342,10 @@ async def extract_rfm_and_screenshot(page, account, target_date_slash, is_naver=
     if grid_info:
         current_size = page.viewport_size
         new_height = max(grid_info['scrollHeight'] * 3, 3000)
-        await page.set_viewport_size({'width': current_size['width'], 'height': new_height})
+        # v5.0.7: width도 확장해서 광고ROAS 등 우측 컬럼이 AG Grid 가상 렌더링에서 DOM에 포함되도록
+        # AG Grid scrollWidth가 기준. 여유 200px 추가.
+        new_width = max(grid_info.get('scrollWidth', 0) + 200, 2400, current_size['width'])
+        await page.set_viewport_size({'width': new_width, 'height': new_height})
         await page.wait_for_timeout(2000)
         await page.evaluate(CLEANUP_JS)
         await page.wait_for_timeout(500)

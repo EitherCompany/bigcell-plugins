@@ -426,11 +426,12 @@ innerText 패턴 (날짜당):
 
 ## 개선 이력
 
-- **v5.0.6 (2026-04-23)** — RFM 스크린샷 컬럼 정리 (광고집행비/ROAS 우측 가시성)
-  - 증상: 쿠팡/네이버 RFM 스크린샷에서 `최근7일 일일 평균판매량`과 `노출순위` 컬럼이 넓은 폭을 차지해, 우측 `광고집행비`·`광고ROAS`가 화면 밖으로 밀려 잘림. 사용자 수동으로는 드래그앤드롭으로 두 컬럼 빼고 찍어야 했음.
-  - 해결: `CLEANUP_JS`에 동적 헤더 매칭 로직 추가. `.ag-header-cell`을 스캔해 innerText가 "7일"+"평균판매량" 포함 또는 "노출순위"로 시작하는 헤더를 찾아 해당 `col-id`를 하드코드 hide 리스트(adverts-anlytics, product_stage_name, order_request)에 병합. 기존 CSS `display:none !important` 방식 그대로 재사용 → 빅셀이 col-id 바꿔도 한글 헤더만 안 바뀌면 작동.
-  - 구현 위치: `integrated_bigcell.py` 의 `CLEANUP_JS` 상수 블록 (화질은 기존 `device_scale_factor=2` 유지 — 컬럼 제거만으로 가시성 확보)
-  - 효과: 광고집행비·광고ROAS 컬럼이 스크린샷 안에 들어옴. 사용자 수동 조작 불필요.
+- **v5.0.7 (2026-04-23)** — RFM 스크린샷 뷰포트 width 확장 (우측 컬럼 잘림 해결)
+  - 증상: 쿠팡/네이버 RFM 스크린샷 우측 `광고ROAS` 컬럼이 잘려서 안 보임. 기존 3개 컬럼(광고분석/운영상태/1688구매요청)은 CSS `display:none`으로 이미 잘 숨겨지고 있는데도 우측 잘림 발생.
+  - 원인: AG Grid가 **수평으로도 가상 렌더링**을 하기 때문에, 뷰포트 너비 밖의 컬럼은 DOM에 아예 존재하지 않음 → `.ag-root-wrapper` 스크린샷에도 안 잡힘. 기존 코드는 스크린샷 직전 viewport **height만** 키우고 width는 그대로 둬서 문제.
+  - 해결: `GET_GRID_HEIGHT_JS`에 `scrollWidth` 추가(body/header viewport 중 큰 값). 스크린샷 직전 `set_viewport_size`로 width도 `scrollWidth + 200` (최소 2400)으로 확장. 확장 후 AG Grid가 전체 컬럼을 DOM에 렌더링 → 스크린샷에 전부 포함.
+  - 구현 위치: `integrated_bigcell.py` 의 `GET_GRID_HEIGHT_JS`(scrollWidth 필드 추가) + `extract_rfm_and_screenshot`의 viewport 재설정 구간.
+  - v5.0.6 롤백: 잘못된 방향(7일 평균판매량 + 노출순위 동적 숨김)이었음. 사용자 원래 의도는 "우측 잘림 해결"이지 "유용한 지표 컬럼 숨기기"가 아니었음. CLEANUP_JS는 5.0.5 원상복구.
 
 - **v5.0.5 (2026-04-22)** — 네이버 매출 Lambda raw API 가로채기
   - 증상: `.ag-floating-top-container` 요약행에서 `col-id="sale_amount"` 셀이 빈 문자열을 반환 → 네이버 매출이 항상 ₩0 으로 저장 → 매출 비중 % 왜곡

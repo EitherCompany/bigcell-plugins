@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "bigcell-plugins",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "이더컴퍼니 빅셀 업무 자동화 Cowork 플러그인 마켓플레이스",
   "owner": {
     "name": "EitherCompany",
@@ -11,8 +11,8 @@
   "plugins": [
     {
       "name": "bigcell-daily-report-v5",
-      "description": "빅셀(BigCell) 일일 매출 분석 보고서 생성 스킬 v5.0.6. 5개 이커머스 계정의 쿠팡/네이버 매출을 수집하고 (1)카드 비중(%) (2)8일 주간 차트(지난주 동일요일 포함, 레이블 MM/DD(요일) 형식) (3)특이사항 번호 리스트(①②③) (4)전일/지난주 대비 컬럼 색상 구분 표가 포함된 종합 HTML 보고서를 생성한다. v5.0.6: RFM 스크린샷에서 '최근7일 일일 평균판매량'과 '노출순위' 컬럼을 동적으로 숨김 — 광고집행비/광고ROAS가 우측에 보이도록 가독성 개선.",
-      "version": "5.0.6",
+      "description": "빅셀(BigCell) 일일 매출 분석 보고서 생성 스킬 v5.0.7. 5개 이커머스 계정의 쿠팡/네이버 매출을 수집하고 (1)카드 비중(%) (2)8일 주간 차트(지난주 동일요일 포함, 레이블 MM/DD(요일) 형식) (3)특이사항 번호 리스트(①②③) (4)전일/지난주 대비 컬럼 색상 구분 표가 포함된 종합 HTML 보고서를 생성한다. v5.0.7: RFM 스크린샷 뷰포트 width를 AG Grid scrollWidth 기준으로 확장 — 우측 광고집행비/광고ROAS 컬럼이 가상 렌더링에서 DOM에 포함되어 스크린샷에 찍힘. v5.0.6 롤백(잘못된 컬럼 동적 숨김 제거).",
+      "version": "5.0.7",
       "author": {
         "name": "이창근 (이더컴퍼니)"
       },
