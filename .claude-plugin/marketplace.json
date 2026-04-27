@@ -11,7 +11,7 @@
   "plugins": [
     {
       "name": "bigcell-daily-report-v5",
-      "description": "빅셀(BigCell) 일일 매출 분석 + 자동 GitHub 동기화 플러그인 v5.2.0. (1) bigcell-daily-report 스킬: 5개 이커머스 계정의 쿠팡/네이버 매출을 수집하여 카드 비중(%)·8일 주간 차트(지난주 동일요일 포함, 레이블 MM/DD(요일))·지난주 동일요일 대비 특이사항 섹션이 포함된 종합 HTML 보고서를 생성. (2) plugin-github-sync 스킬: 플러그인 편집 시 EitherCompany/bigcell-plugins 레포로 자동 패키징·푸시·태그·릴리스까지 완결. PAT는 워크스페이스 .env 우선, 누락 시 노션 fallback. v5.2.0: plugin-github-sync 스킬 신설 + rebuild_plugin.sh 에 Secret 검사 + git tag + GitHub Release 생성 단계 보강.",
+      "description": "빅셀(BigCell) 일일 매출 분석 + 자동 GitHub 동기화 플러그인 v5.2.0. (1) bigcell-daily-report 스킬: 5개 이커머스 계정의 쿠팡/네이버 매출을 수집하여 카드 비중(%)·8일 주간 차트(지난주 동일요일 포함, 레이블 MM/DD(요일))·지난주 동일요일 대비 특이사항 섹션이 포함된 종합 HTML 보고서를 생성. 호출 시점 시스템 date 기준 어제 자동 적용 + 월요일 catch-up (누락된 금/토/일 보고서 자동 일괄 생성). (2) plugin-github-sync 스킬: 플러그인 편집 시 EitherCompany/bigcell-plugins 레포로 자동 패키징·푸시·태그·릴리스까지 완결. PAT는 워크스페이스 .env 우선, 누락 시 노션 fallback. v5.2.0: 날짜 규칙 강화 + 월요일 catch-up + plugin-github-sync 스킬 신설 + rebuild_plugin.sh 에 Secret 검사·git tag·GitHub Release 생성.",
       "version": "5.2.0",
       "author": {
         "name": "이창근 (이더컴퍼니)"

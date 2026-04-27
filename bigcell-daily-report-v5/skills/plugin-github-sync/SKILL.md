@@ -234,4 +234,6 @@ rm -rf "$TMPREPO"  # PAT 잔존 방지
 - [ ] `rebuild_plugin.sh` 실행 성공 → commit + push 완료
 - [ ] `git tag v<N>.<M>.<K>` + `git push origin v<N>.<M>.<K>` 성공
 - [ ] GitHub 릴리스 생성 성공
-- [ ] 임시 디렉토리 정리 (`rm -rf /tmp/.verify_*`, `/t
+- [ ] 임시 디렉토리 정리 (`rm -rf /tmp/.verify_*`, `/tmp/.push_*`)
+- [ ] 커밋·릴리스 URL 창근님에게 공유
+- [ ] 타 PC 업데이트 안내 (`/plugin update` 명령 언급)
