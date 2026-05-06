@@ -46,6 +46,10 @@ ACCOUNTS = [
 ]
 
 # ── JS 코드 ──
+# v5.2.1: Auth 객체를 export name 하드코드(mod.K) 대신 동적으로 찾는다.
+# 빅셀이 entry.js 빌드를 새로 하면 minified export name 이 K → 다른 글자로 바뀌어서
+# `Auth.signIn is not a function` 에러가 난다. 모든 export 를 순회하며 signIn +
+# currentAuthenticatedUser 메서드 둘 다 가진 객체를 자동 탐색.
 LOGIN_JS = """
 (async () => {{
     const scripts = document.querySelectorAll('script[src*="/_nuxt/entry"]');
@@ -53,7 +57,32 @@ LOGIN_JS = """
     for (const s of scripts) {{ if (s.src.includes('entry')) {{ entryPath = new URL(s.src).pathname; break; }} }}
     if (!entryPath) entryPath = '/_nuxt/entry.6e177eba.js';
     const mod = await import(entryPath);
-    const Auth = mod.K;
+
+    // v5.2.1 동적 Auth 탐색 — 1단계: top-level export 중 signIn+currentAuthenticatedUser 둘 다 있는 객체
+    let Auth = null;
+    const isAuthLike = (v) => v && typeof v.signIn === 'function' && typeof v.currentAuthenticatedUser === 'function';
+    for (const k of Object.keys(mod)) {{
+        if (isAuthLike(mod[k])) {{ Auth = mod[k]; break; }}
+    }}
+    // 2단계: 한 단계 깊이 (객체 안의 객체)
+    if (!Auth) {{
+        for (const k of Object.keys(mod)) {{
+            const v = mod[k];
+            if (v && typeof v === 'object') {{
+                for (const k2 of Object.keys(v)) {{
+                    if (isAuthLike(v[k2])) {{ Auth = v[k2]; break; }}
+                }}
+                if (Auth) break;
+            }}
+        }}
+    }}
+    // 3단계: 최후 fallback — 옛 패턴 mod.K
+    if (!Auth && isAuthLike(mod.K)) Auth = mod.K;
+    if (!Auth) {{
+        const keys = Object.keys(mod).join(',');
+        throw new Error('Auth 객체 탐색 실패. mod keys: ' + keys);
+    }}
+
     try {{ await Auth.signOut(); }} catch(e) {{}}
     await Auth.signIn({{ username: '{account_id}', password: '{password}' }});
     const user = await Auth.currentAuthenticatedUser();

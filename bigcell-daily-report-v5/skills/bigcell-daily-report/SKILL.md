@@ -402,10 +402,10 @@ echo "Account order:"; grep -oE 'class="account-name">[^<]+' "$F"
 
 ### 빅셀 앱 구조
 - **Nuxt 3 (Vue 3) + PrimeVue** 기반 (React 아님)
-- AWS Cognito 인증, Amplify Auth 모듈이 entry.*.js에서 `K`로 export
-- entry 모듈 해시는 빅셀 배포마다 변경될 수 있음 → integrated_bigcell.py가 동적 탐색으로 처리
+- AWS Cognito 인증, Amplify Auth 모듈이 entry.*.js 의 minified export 로 노출됨
+- entry 모듈 **해시뿐 아니라 export name 도** 빅셀 빌드마다 변경됨 → v5.2.1부터 `signIn`+`currentAuthenticatedUser` 메서드 보유 export 를 동적 탐색
 
-### 로그인 JS (Playwright용, `{{` 이중 중괄호 필수)
+### 로그인 JS (Playwright용, `{{` 이중 중괄호 필수, v5.2.1 동적 탐색 버전)
 ```javascript
 (async () => {{
     const scripts = document.querySelectorAll('script[src*="/_nuxt/entry"]');
@@ -413,7 +413,17 @@ echo "Account order:"; grep -oE 'class="account-name">[^<]+' "$F"
     for (const s of scripts) {{ if (s.src.includes('entry')) {{ entryPath = new URL(s.src).pathname; break; }} }}
     if (!entryPath) entryPath = '/_nuxt/entry.6e177eba.js';
     const mod = await import(entryPath);
-    const Auth = mod.K;
+    // 동적 Auth 탐색: signIn+currentAuthenticatedUser 둘 다 가진 export
+    let Auth = null;
+    const isAuthLike = (v) => v && typeof v.signIn === 'function' && typeof v.currentAuthenticatedUser === 'function';
+    for (const k of Object.keys(mod)) if (isAuthLike(mod[k])) {{ Auth = mod[k]; break; }}
+    if (!Auth) for (const k of Object.keys(mod)) {{
+        const v = mod[k];
+        if (v && typeof v === 'object') for (const k2 of Object.keys(v)) if (isAuthLike(v[k2])) {{ Auth = v[k2]; break; }}
+        if (Auth) break;
+    }}
+    if (!Auth && isAuthLike(mod.K)) Auth = mod.K;  // 옛 fallback
+    if (!Auth) throw new Error('Auth 객체 탐색 실패. mod keys: ' + Object.keys(mod).join(','));
     try {{ await Auth.signOut(); }} catch(e) {{}}
     await Auth.signIn({{ username: '{account_id}', password: '{password}' }});
     const user = await Auth.currentAuthenticatedUser();
@@ -462,6 +472,13 @@ innerText 패턴 (날짜당):
 - **v5 포맷 요구사항(비중 카드 + 특이사항 섹션 + 지난주 비교) 누락 금지** — 하나라도 빠지면 포맷 퇴행
 
 ## 개선 이력
+
+- **v5.2.1 (2026-05-06)** — 빅셀 entry.js 빌드 변경 대응 (동적 Auth 탐색)
+  - 증상: 빅셀이 5/5경 entry.js 새로 빌드 → minified export name 변경(이전 `K` → 다른 글자) → `Auth.signIn is not a function` 에러로 모든 계정 로그인 실패.
+  - 원인: 기존 `LOGIN_JS` 가 `const Auth = mod.K;` 로 export name 을 하드코딩. 빅셀 빌드마다 minify 결과 달라져서 깨질 수 있음.
+  - 해결: `signIn` + `currentAuthenticatedUser` 메서드 둘 다 가진 export 를 자동 탐색. 1단계 top-level 순회 → 2단계 한 단계 깊이 → 3단계 옛 `mod.K` fallback. 모든 단계 실패 시 명시적 에러 메시지 throw (디버깅용 mod keys 동봉).
+  - 구현 위치: `integrated_bigcell.py` 의 `LOGIN_JS` 상수 블록.
+  - 후속 효과: 빅셀이 또 빌드 변경해도 export name 만 바뀌고 메서드 시그니처 동일하면 자동 대응.
 
 - **v5.2.0 (2026-04-27)** — 날짜 규칙 강화 + 월요일 catch-up
   - 변경: (1) "어제" 계산이 항상 스킬 호출 시점의 시스템 `date` 명령 기준임을 명시 (이전 세션 메모리/타임스탬프 추정 금지). (2) 월요일에 호출되면 지난 금/토/일 보고서 누락분을 어제(일요일)와 함께 자동 일괄 생성하는 catch-up 규칙 추가.
