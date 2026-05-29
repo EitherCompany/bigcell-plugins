@@ -1,0 +1,20 @@
+{
+  "name": "cs-auto-answer-plugin",
+  "version": "1.0.0",
+  "description": "사방넷 CS(고객문의) 자동답변 플러그인 v1.0.0. 쿠팡/네이버 스마트스토어 문의를 사방넷에서 수집 → 안전·친절 답변 생성 → 화면저장 → 쇼핑몰 송신. 위험회피 답변 원칙(효능/확신 표현 금지), 신규접수 누락 방지(division=000 조회), 교환·쿠팡오류 건 사용자 확인 예외 포함. 자가학습 가이드라인(cs_answer_guidelines.json) + CS 메모리(템플릿 형식·일반식품 disclaimer 조건·사진 증빙·뉴트리정 성분 레퍼런스) 번들. plugin-github-sync 스킬로 EitherCompany/bigcell-plugins 레포 자동 동기화.",
+  "author": {
+    "name": "이더컴퍼니"
+  },
+  "keywords": [
+    "cs",
+    "고객문의",
+    "자동답변",
+    "사방넷",
+    "sabangnet",
+    "쿠팡",
+    "스마트스토어",
+    "customer-service",
+    "self-learning",
+    "github-sync"
+  ]
+}

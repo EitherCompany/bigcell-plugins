@@ -1,0 +1,10 @@
+- [CS 답변 - 쿠팡/스마트스토어 동일상품 동일답변 원칙](cs_cross_channel_products.md) — 뉴트리정·이더컴퍼니는 쇼핑몰별 상품명이 달라도 성분 동일하면 같은 CS 답변 적용
+- [뉴트리정 상품 성분 레퍼런스](nutrijeong_product_ingredients.md) — 뉴트리정 15종 상품별 포장·식품유형·핵심 성분 정리 (멜라토닌 2mg/5mg, 마그네슘 3종 별도 상품 주의)
+- [★ 뉴트리정 CS 답변 시 견적서 PDF 직접 확인 필수](nutrijeong_pdf_check_mandatory.md) — 뉴트리정 서류 폴더 PDF 매번 직접 열어 함량 확인, 메모리만 의존 절대 금지
+- [★ 사방넷 신규 미답변 검색 - division=001 단독 사용 금지](cs_search_division_warning.md) — division=000 + answText 빈 것 필터로 조회해야 누락 없음
+- [CS 답변 - 일반식품 disclaimer 생략 조건](cs_general_food_disclaimer.md) — 효능 문의에만 "일반식품·의약품 아님" 문구 사용, 복용법/스펙 문의엔 생략
+- [쿠팡 이더컴퍼니 계정 - 상품별 브랜드 구분](eithercompany_brand_mapping.md) — eithercompany 계정은 가습기는 "클린인", 깔창은 "이더컴퍼니" 브랜드명 사용
+- [CS 자동답변 전체 워크플로우](cs_full_workflow.md) — 문의수집(모든 사업자) → 답변저장 → 쇼핑몰 답변송신까지 전부 Claude가 자동 수행
+- [CS 답변 - 상품 이슈 시 사진 증빙 요청](cs_photo_verification.md) — 소비기한·파손·이물 등 실물 이슈는 반품 전 톡톡/이메일로 사진 요청 먼저
+- [CS 답변 템플릿 표준 형식](cs_template_format.md) — 인사·감사·disclaimer 표준 포맷, 감사 문구 생략 + 영양제 disclaimer 짧게
+- [CS 답변 - 교환/쿠팡 오류 건 사용자 직접 처리](cs_exchange_coupang_error.md) — 교환 재배송 일정·쿠팡측 오류 문의는 자동 송신 말고 사용자 확인
