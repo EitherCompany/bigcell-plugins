@@ -129,6 +129,23 @@ sed -e "s|SESSION_ID_PLACEHOLDER|현재세션ID|g" \
     "스킬경로/scripts/integrated_bigcell.py" | python3
 ```
 
+### 분할 실행 (v5.3.0 — 샌드박스 셸 타임아웃 대응)
+
+셸 호출당 실행 시간이 제한된 환경(Cowork 샌드박스 45초 등)에서는 전체 실행(~4분)이 불가능하다. v5.3.0부터 환경변수로 **계정×단계 분할 실행**을 지원한다 (환경변수 미지정 시 기존 전체 실행과 100% 동일):
+
+```bash
+# 계정 1개 × 단계 1개씩 실행 (호출당 12~35초)
+ONLY_ACCOUNT=nutrijung DO=dash  python3 /tmp/staged.py   # 로그인+대시보드+지난주 보강
+ONLY_ACCOUNT=nutrijung DO=rfm   python3 /tmp/staged.py   # 로그인+쿠팡 RFM+스크린샷
+ONLY_ACCOUNT=nutrijung DO=naver python3 /tmp/staged.py   # 로그인+네이버 (듀얼 계정만)
+```
+
+- `ONLY_ACCOUNT`: 계정 id 1개로 필터 (`nutrijung`/`eithercompany`/`cleanintech`/`mineflow`/`edencorporation`)
+- `DO`: `dash` | `rfm` | `naver` | `all`(기본)
+- 실행 순서: 계정 순서 고정 규칙대로, 계정마다 dash → rfm → (듀얼이면) naver
+- 각 단계는 독립 프로세스로 재로그인하며 결과 JSON/스크린샷은 동일 경로에 저장되므로 이후 Phase 2~7은 변경 없음
+- **백그라운드(nohup/tmux) 실행은 샌드박스에서 호출 종료 시 강제 종료되므로 사용 금지** — 반드시 포그라운드 분할 실행
+
 ### 수집 프로세스 (계정당 자동 처리)
 
 1. **로그인**: Auth.signIn()으로 Cognito 인증 (entry 모듈 동적 탐색)
@@ -472,6 +489,13 @@ innerText 패턴 (날짜당):
 - **v5 포맷 요구사항(비중 카드 + 특이사항 섹션 + 지난주 비교) 누락 금지** — 하나라도 빠지면 포맷 퇴행
 
 ## 개선 이력
+
+- **v5.3.0 (2026-07-10)** — 빅셀 신규 UI 컬럼 구조 대응 + 계정×단계 분할 실행 지원
+  - 증상 1: 6월 초 빅셀 배포로 RFM 그리드 컬럼 구조 변경 — `product_info` 단일 컬럼이 `product_id` + `product_name` (pinned-left)으로 분리되고, `sale_amount` 컬럼이 사라지며 매출이 `sale_qty` 셀 안에 `163\n(₩1,276,884)` 형태로 통합됨. 기존 추출 JS가 상품 0개 반환.
+  - 해결 1: RFM 추출 JS 전면 교체 — `.ag-center-cols-container .ag-row` 순회 + `row-index`로 pinned-left 행 매칭 → `product_id`/`product_name`에서 pid·상품명 추출 (구 `product_info` 구조 fallback 유지), 매출은 `gv('sale_amount')` 우선 + 없으면 `sale_qty` 셀 내 `₩...` 정규식 추출. 2026-06-12~07-10 6회 일일 실행으로 검증 완료.
+  - 증상 2: Cowork 샌드박스 셸이 호출당 45초 제한 + 백그라운드 프로세스(nohup/setsid/tmux 모두)를 호출 종료 시 강제 종료 → 전체 실행(~4분) 불가능.
+  - 해결 2: `ONLY_ACCOUNT`(계정 id 필터) + `DO`(dash|rfm|naver|all) 환경변수 추가. 미지정 시 기존 전체 실행과 동일(하위 호환 100%). 분할 시 호출당 12~35초로 13회 호출이면 5계정 전체 수집 완료. 상세는 "분할 실행" 섹션.
+  - 구현 위치: `integrated_bigcell.py` — ACCOUNTS 정의 직후 env 필터, 대시보드/쿠팡RFM/네이버 3개 구간 조건 분기, RFM 스크롤 수집 JS 교체.
 
 - **v5.2.1 (2026-05-06)** — 빅셀 entry.js 빌드 변경 대응 (동적 Auth 탐색)
   - 증상: 빅셀이 5/5경 entry.js 새로 빌드 → minified export name 변경(이전 `K` → 다른 글자) → `Auth.signIn is not a function` 에러로 모든 계정 로그인 실패.

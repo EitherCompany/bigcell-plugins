@@ -45,6 +45,11 @@ ACCOUNTS = [
     {'id': 'edencorporation', 'name': '이든코퍼레이션', 'naver': False, 'dual': False, 'data_prefix': 'account5'},
 ]
 
+_only = os.environ.get('ONLY_ACCOUNT')
+_do = os.environ.get('DO', 'all')
+if _only:
+    ACCOUNTS = [a for a in ACCOUNTS if a['id'] == _only]
+
 # ── JS 코드 ──
 # v5.2.1: Auth 객체를 export name 하드코드(mod.K) 대신 동적으로 찾는다.
 # 빅셀이 entry.js 빌드를 새로 하면 minified export name 이 K → 다른 글자로 바뀌어서
@@ -345,20 +350,36 @@ async def extract_rfm_and_screenshot(page, account, target_date_slash, is_naver=
         col_id = 'product_info' if not is_naver else 'product_info'
         # 요약보기에서는 naver도 product_info 사용
 
-        count = await page.evaluate(f"""
-        (() => {{
-            window._allProducts = window._allProducts || {{}};
-            document.querySelectorAll('.ag-body-viewport .ag-row').forEach(r => {{
-                const info = r.querySelector('[col-id="product_info"]') || r.querySelector('[col-id="product_name"]');
-                const name = info ? info.innerText.split('\\n')[0].trim() : '';
-                const idMatch = info ? info.innerText.match(/(\\d{{7,}})/) : null;
-                const pid = idMatch ? idMatch[1] : '';
-                if (!name || !pid) return;
-                const gv = (c) => {{ const el = r.querySelector(`[col-id="${{c}}"]`); if(!el) return ''; const m = el.innerText.match(/-?₩[\\d,]+|^[\\d,]+/); return m?m[0]:''; }};
-                window._allProducts[pid] = {{name, productId:pid, qty:gv('sale_qty'), sales:gv('sale_amount'), adCost:gv('advert_ad_cost_sum'), netProfit:gv('sale_net_amount')}};
-            }});
+        count = await page.evaluate("""
+        (() => {
+            window._allProducts = window._allProducts || {};
+            document.querySelectorAll('.ag-center-cols-container .ag-row').forEach(r => {
+                const ri = r.getAttribute('row-index');
+                const pr = document.querySelector(`.ag-pinned-left-cols-container .ag-row[row-index="${ri}"]`) || r;
+                let pid = '', name = '';
+                const idEl = pr.querySelector('[col-id="product_id"]');
+                const nameEl = pr.querySelector('[col-id="product_name"]');
+                const infoEl = pr.querySelector('[col-id="product_info"]') || r.querySelector('[col-id="product_info"]');
+                if (idEl || nameEl) {
+                    const m = idEl ? idEl.innerText.match(/(\\d{7,})/) : null;
+                    pid = m ? m[1] : '';
+                    name = nameEl ? nameEl.innerText.split('\\n')[0].trim() : '';
+                } else if (infoEl) {
+                    name = infoEl.innerText.split('\\n')[0].trim();
+                    const m = infoEl.innerText.match(/(\\d{7,})/);
+                    pid = m ? m[1] : '';
+                }
+                if (!pid || !name) return;
+                const gv = (c) => { const el = r.querySelector(`[col-id="${c}"]`); if(!el) return ''; const m = el.innerText.match(/-?\u20a9[\\d,]+|^[\\d,]+/); return m?m[0]:''; };
+                const sqEl = r.querySelector('[col-id="sale_qty"]');
+                const sqTxt = sqEl ? sqEl.innerText : '';
+                const qtyM = sqTxt.match(/^[\\d,]+/);
+                const salesM = sqTxt.match(/\u20a9[\\d,]+/);
+                const salesVal = gv('sale_amount') || (salesM ? salesM[0] : '');
+                window._allProducts[pid] = {name, productId:pid, qty:(qtyM?qtyM[0]:gv('sale_qty')), sales:salesVal, adCost:gv('advert_ad_cost_sum'), netProfit:gv('sale_net_amount')};
+            });
             return Object.keys(window._allProducts).length;
-        }})();
+        })();
         """)
 
         if count >= total_count and total_count > 0:
@@ -479,108 +500,110 @@ async def main():
             await page.wait_for_timeout(2000)
             await page.evaluate(LOGIN_JS.format(account_id=account_id, password=PASSWORD))
 
-            # ── 2) 대시보드에서 매출/이익금/광고비/순이익금 추출 ──
-            print(f"  📊 대시보드 수집...")
-            await page.goto('https://app.bigcell.co.kr/v2/dashboard', wait_until='domcontentloaded', timeout=30000)
-            await page.wait_for_timeout(5000)
-            await dismiss_overlays(page)
+            if _do in ('dash','all'):
+                # ── 2) 대시보드에서 매출/이익금/광고비/순이익금 추출 ──
+                print(f"  📊 대시보드 수집...")
+                await page.goto('https://app.bigcell.co.kr/v2/dashboard', wait_until='domcontentloaded', timeout=30000)
+                await page.wait_for_timeout(5000)
+                await dismiss_overlays(page)
 
-            # 대시보드 innerText에서 날짜별 ₩ 값 추출
-            dashboard_data = await page.evaluate(DASHBOARD_EXTRACT_JS)
+                # 대시보드 innerText에서 날짜별 ₩ 값 추출
+                dashboard_data = await page.evaluate(DASHBOARD_EXTRACT_JS)
 
-            today_data = dashboard_data.get(TARGET_DATE) if dashboard_data else None
-            yest_data = dashboard_data.get(PREV_DATE) if dashboard_data else None
+                today_data = dashboard_data.get(TARGET_DATE) if dashboard_data else None
+                yest_data = dashboard_data.get(PREV_DATE) if dashboard_data else None
 
-            # 대시보드에 보이는 모든 날짜를 저장 (지난주 동일요일, 주간 추이용)
-            if dashboard_data:
-                merged = dict(dashboard_data)  # LAST_WEEK fallback 결과 머지용
-            else:
-                print(f"  ⚠️ 대시보드 추출 실패. keys: None")
-                merged = {}
-
-            # ── 2-1) LAST_WEEK_DATE(지난주 동일요일) 보강 ──
-            # 대시보드 디폴트 뷰에 7일 전 데이터가 포함되지 않으면,
-            # 쿠팡 통계 페이지에 해당 일자만 필터해 요약행에서 역산 추출
-            if LAST_WEEK_DATE not in merged:
-                lw_slash = LAST_WEEK_DATE.replace('-', '/')
-                lw_url = (f'https://app.bigcell.co.kr/v2/statistics/coupang'
-                          f'?q_sale_date_from={lw_slash}&q_sale_date_to={lw_slash}'
-                          f'&q_product_types=RFM&q_show_type=summary')
-                try:
-                    print(f"  🔁 {LAST_WEEK_DATE} 보강 수집 → 쿠팡 통계 요약행")
-                    await page.goto(lw_url, wait_until='domcontentloaded', timeout=30000)
-                    await page.wait_for_timeout(4000)
-                    await dismiss_overlays(page)
-                    await page.evaluate(CLEANUP_JS)
-                    await page.wait_for_timeout(400)
-                    lw_summary = await page.evaluate("""
-                    (() => {
-                        const topRow = document.querySelector('.ag-floating-top-container .ag-row');
-                        if (!topRow) return null;
-                        const gv = (c) => {
-                            const el = topRow.querySelector(`[col-id="${c}"]`);
-                            if(!el) return '';
-                            const m = el.innerText.match(/-?₩[\\d,]+/);
-                            return m ? m[0] : '';
-                        };
-                        return { sales: gv('sale_amount'), profit: gv('sale_profit_amount'),
-                                 adCost: gv('advert_ad_cost_sum'), netProfit: gv('sale_net_amount') };
-                    })();
-                    """)
-                    if lw_summary and lw_summary.get('sales'):
-                        merged[LAST_WEEK_DATE] = {
-                            'sales': lw_summary['sales'] or '₩0',
-                            'profit': lw_summary.get('profit') or lw_summary['netProfit'] or '₩0',
-                            'adCost': lw_summary.get('adCost') or '₩0',
-                            'netProfit': lw_summary['netProfit'] or '₩0',
-                        }
-                        print(f"  ✅ 보강 성공: {LAST_WEEK_DATE} 매출={merged[LAST_WEEK_DATE]['sales']}")
-                    else:
-                        print(f"  ⚠️ 보강 실패: {LAST_WEEK_DATE} 요약행 미발견")
-                except Exception as e:
-                    print(f"  ⚠️ {LAST_WEEK_DATE} 보강 중 예외: {e}")
-
-            if merged:
-                all_rows = [{'date': dk, **merged[dk]} for dk in sorted(merged.keys(), reverse=True)]
-                dashboard_json = {'daily': all_rows}
-                dates_found = ', '.join(sorted(merged.keys(), reverse=True)[:10])
-                print(f"  📊 최종 날짜 {len(all_rows)}개 저장: {dates_found}")
-                if today_data:
-                    print(f"  📊 {TARGET_DATE} 매출={today_data['sales']}, 순이익={today_data['netProfit']}")
-                if yest_data:
-                    print(f"  📊 {PREV_DATE} 매출={yest_data['sales']}, 순이익={yest_data['netProfit']}")
-                lw = merged.get(LAST_WEEK_DATE)
-                if lw:
-                    print(f"  📊 {LAST_WEEK_DATE}(지난주 동일요일) 매출={lw['sales']}, 순이익={lw['netProfit']}")
+                # 대시보드에 보이는 모든 날짜를 저장 (지난주 동일요일, 주간 추이용)
+                if dashboard_data:
+                    merged = dict(dashboard_data)  # LAST_WEEK fallback 결과 머지용
                 else:
-                    print(f"  ⚠️ {LAST_WEEK_DATE}(지난주 동일요일) 여전히 없음 — 특이사항 섹션에서 N/A 처리")
-            else:
-                dashboard_json = {'daily': []}
+                    print(f"  ⚠️ 대시보드 추출 실패. keys: None")
+                    merged = {}
 
-            cp_file = f'data_{acc["data_prefix"]}_coupang.json'
-            with open(os.path.join(DATA_DIR, cp_file), 'w', encoding='utf-8') as f:
-                json.dump(dashboard_json, f, ensure_ascii=False, indent=2)
-            print(f"  ✅ {cp_file} 저장")
+                # ── 2-1) LAST_WEEK_DATE(지난주 동일요일) 보강 ──
+                # 대시보드 디폴트 뷰에 7일 전 데이터가 포함되지 않으면,
+                # 쿠팡 통계 페이지에 해당 일자만 필터해 요약행에서 역산 추출
+                if LAST_WEEK_DATE not in merged:
+                    lw_slash = LAST_WEEK_DATE.replace('-', '/')
+                    lw_url = (f'https://app.bigcell.co.kr/v2/statistics/coupang'
+                              f'?q_sale_date_from={lw_slash}&q_sale_date_to={lw_slash}'
+                              f'&q_product_types=RFM&q_show_type=summary')
+                    try:
+                        print(f"  🔁 {LAST_WEEK_DATE} 보강 수집 → 쿠팡 통계 요약행")
+                        await page.goto(lw_url, wait_until='domcontentloaded', timeout=30000)
+                        await page.wait_for_timeout(4000)
+                        await dismiss_overlays(page)
+                        await page.evaluate(CLEANUP_JS)
+                        await page.wait_for_timeout(400)
+                        lw_summary = await page.evaluate("""
+                        (() => {
+                            const topRow = document.querySelector('.ag-floating-top-container .ag-row');
+                            if (!topRow) return null;
+                            const gv = (c) => {
+                                const el = topRow.querySelector(`[col-id="${c}"]`);
+                                if(!el) return '';
+                                const m = el.innerText.match(/-?₩[\\d,]+/);
+                                return m ? m[0] : '';
+                            };
+                            return { sales: gv('sale_amount'), profit: gv('sale_profit_amount'),
+                                     adCost: gv('advert_ad_cost_sum'), netProfit: gv('sale_net_amount') };
+                        })();
+                        """)
+                        if lw_summary and lw_summary.get('sales'):
+                            merged[LAST_WEEK_DATE] = {
+                                'sales': lw_summary['sales'] or '₩0',
+                                'profit': lw_summary.get('profit') or lw_summary['netProfit'] or '₩0',
+                                'adCost': lw_summary.get('adCost') or '₩0',
+                                'netProfit': lw_summary['netProfit'] or '₩0',
+                            }
+                            print(f"  ✅ 보강 성공: {LAST_WEEK_DATE} 매출={merged[LAST_WEEK_DATE]['sales']}")
+                        else:
+                            print(f"  ⚠️ 보강 실패: {LAST_WEEK_DATE} 요약행 미발견")
+                    except Exception as e:
+                        print(f"  ⚠️ {LAST_WEEK_DATE} 보강 중 예외: {e}")
+
+                if merged:
+                    all_rows = [{'date': dk, **merged[dk]} for dk in sorted(merged.keys(), reverse=True)]
+                    dashboard_json = {'daily': all_rows}
+                    dates_found = ', '.join(sorted(merged.keys(), reverse=True)[:10])
+                    print(f"  📊 최종 날짜 {len(all_rows)}개 저장: {dates_found}")
+                    if today_data:
+                        print(f"  📊 {TARGET_DATE} 매출={today_data['sales']}, 순이익={today_data['netProfit']}")
+                    if yest_data:
+                        print(f"  📊 {PREV_DATE} 매출={yest_data['sales']}, 순이익={yest_data['netProfit']}")
+                    lw = merged.get(LAST_WEEK_DATE)
+                    if lw:
+                        print(f"  📊 {LAST_WEEK_DATE}(지난주 동일요일) 매출={lw['sales']}, 순이익={lw['netProfit']}")
+                    else:
+                        print(f"  ⚠️ {LAST_WEEK_DATE}(지난주 동일요일) 여전히 없음 — 특이사항 섹션에서 N/A 처리")
+                else:
+                    dashboard_json = {'daily': []}
+
+                cp_file = f'data_{acc["data_prefix"]}_coupang.json'
+                with open(os.path.join(DATA_DIR, cp_file), 'w', encoding='utf-8') as f:
+                    json.dump(dashboard_json, f, ensure_ascii=False, indent=2)
+                print(f"  ✅ {cp_file} 저장")
 
             # ── 3) 듀얼 계정: 네이버 대시보드는 네이버 RFM 추출 시 같이 처리 ──
 
-            # ── 4) 쿠팡 RFM 데이터 + 스크린샷 ──
-            print(f"  📊 쿠팡 RFM 수집 + 스크린샷...")
-            products, screenshot = await extract_rfm_and_screenshot(page, acc, TARGET_DATE_SLASH, is_naver=False)
+            if _do in ('rfm','all'):
+                # ── 4) 쿠팡 RFM 데이터 + 스크린샷 ──
+                print(f"  📊 쿠팡 RFM 수집 + 스크린샷...")
+                products, screenshot = await extract_rfm_and_screenshot(page, acc, TARGET_DATE_SLASH, is_naver=False)
 
-            rfm_file = f'{account_id}_keyword_data.json'
-            with open(os.path.join(DATA_DIR, rfm_file), 'w', encoding='utf-8') as f:
-                json.dump(products, f, ensure_ascii=False, indent=2)
-            print(f"  ✅ {rfm_file} 저장 ({len(products)}개 상품)")
+                rfm_file = f'{account_id}_keyword_data.json'
+                with open(os.path.join(DATA_DIR, rfm_file), 'w', encoding='utf-8') as f:
+                    json.dump(products, f, ensure_ascii=False, indent=2)
+                print(f"  ✅ {rfm_file} 저장 ({len(products)}개 상품)")
 
-            if screenshot:
-                ss_file = f'{account_id}_coupang_rfm.png'
-                with open(os.path.join(SCREENSHOT_DIR, ss_file), 'wb') as f:
-                    f.write(screenshot)
-                print(f"  ✅ {ss_file} 저장 ({len(screenshot):,} bytes)")
+                if screenshot:
+                    ss_file = f'{account_id}_coupang_rfm.png'
+                    with open(os.path.join(SCREENSHOT_DIR, ss_file), 'wb') as f:
+                        f.write(screenshot)
+                    print(f"  ✅ {ss_file} 저장 ({len(screenshot):,} bytes)")
 
             # ── 5) 네이버 상품 데이터 + 스크린샷 + 네이버 대시보드 ──
-            if acc['naver']:
+            if acc['naver'] and _do in ('naver','all'):
                 print(f"  📊 네이버 상품 수집 + 스크린샷...")
                 # ✨ 빅셀 네이버 UI 가 sale_amount 컬럼을 숨겨버리므로
                 #    내부 Lambda(ta7e75y...) raw 응답을 가로채 sale_amount 를 직접 합산한다.
